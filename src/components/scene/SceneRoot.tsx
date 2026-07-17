@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CameraRig } from '../camera/CameraRig';
 import { EventsManager } from '../celestial-objects/EventsManager';
+import { HorizonOcclusion } from '../black-hole/HorizonOcclusion';
 import { SceneCompositor } from './SceneCompositor';
 import { CompositorScenesProvider } from './CompositorScenesProvider';
 import { SimulationClock } from './SimulationClock';
@@ -30,6 +31,7 @@ export function SceneRoot() {
                 <ContextLossHandler />
                 <CameraRig />
                 <SceneCompositor />
+                <HorizonOcclusion />
                 <EventsManager />
                 <ParticleField />
                 <DiagramOverlay />

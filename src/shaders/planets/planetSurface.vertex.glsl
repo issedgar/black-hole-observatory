@@ -3,6 +3,7 @@
 // asteroids and (with zero displacement) metallic craft/debris.
 
 #include <noise>
+#include <objectLens>
 
 uniform float uDisplacement;
 uniform float uSeed;
@@ -61,5 +62,7 @@ void main() {
     vSurfacePos = displaced;
     vNormal = normalize(normalMatrix * normal);
 
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(deformed, 1.0);
+    gl_Position = applyBlackHoleLens(
+        projectionMatrix * modelViewMatrix * vec4(deformed, 1.0)
+    );
 }

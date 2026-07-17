@@ -217,10 +217,11 @@ export function EventsManager() {
         [pool],
     );
 
-    useFrame(() => {
+    useFrame((state) => {
         const now = simClock.time;
         simTime.current = now;
         const dt = simClock.scaledDelta;
+        const aspect = state.size.width / state.size.height;
 
         // Scheduler (respects pause via the frozen clock).
         if (
@@ -341,6 +342,7 @@ export function EventsManager() {
 
                 const uniforms = registration.material.uniforms;
                 uniforms.uHeat.value = kinematics.heat;
+                uniforms.uLensAspect.value = aspect;
                 // Feed the object-local direction to the hole and the tidal
                 // stress so the vertex shader stretches the body correctly.
                 if (uniforms.uTidalStrength) {

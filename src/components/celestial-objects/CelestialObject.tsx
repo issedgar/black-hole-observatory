@@ -7,6 +7,7 @@ import planetFragment from '../../shaders/planets/planetSurface.fragment.glsl?ra
 import gasVertex from '../../shaders/planets/gasCloud.vertex.glsl?raw';
 import gasFragment from '../../shaders/planets/gasCloud.fragment.glsl?raw';
 import noiseSource from '../../shaders/common/noise.glsl?raw';
+import objectLensSource from '../../shaders/lensing/objectLens.glsl?raw';
 
 interface CelestialObjectProps {
     event: ActiveEvent;
@@ -47,6 +48,7 @@ export function CelestialObject({
     const material = useMemo(() => {
         const vertexShader = resolveIncludes(isGas ? gasVertex : planetVertex, {
             noise: noiseSource,
+            objectLens: objectLensSource,
         });
         const fragmentShader = resolveIncludes(
             isGas ? gasFragment : planetFragment,
@@ -62,6 +64,8 @@ export function CelestialObject({
             },
             uHeat: { value: 0 },
             uSeed: { value: params.seed },
+            // Screen-space lensing (updated per frame by the EventsManager).
+            uLensAspect: { value: 1 },
         };
         if (!isGas) {
             uniforms.uDisplacement = {

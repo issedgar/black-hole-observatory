@@ -10,11 +10,11 @@ import fragmentShader from '../../shaders/particles/particle.fragment.glsl?raw';
  * Renders and integrates the shared particle pool.
  *
  * Particles are drawn as an additive foreground pass in the main scene, over the
- * accretion disk so incandescent fragments stay visible, and depth-tested
- * against the horizon sphere so the shadow still occludes matter behind it. This
- * trades screen-space lensing of the particles for visibility and a correct
- * black shadow — the disrupted bodies that emit them remain lensed in the
- * background scene.
+ * accretion disk so incandescent fragments stay visible, and depth-tested against
+ * the HorizonOcclusion sphere so the shadow still occludes matter behind the hole.
+ * This trades screen-space lensing of the particles for visibility and a correct
+ * black shadow; the captured bodies that emit them get a bounded screen-space lens
+ * bend instead (see objectLens.glsl).
  */
 export function ParticleField() {
     const pool = useParticlePool();
