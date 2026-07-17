@@ -15,9 +15,14 @@ import fieldCompositeFragmentShader from '../../shaders/black-hole/blackHoleFiel
 import brightFragmentShader from '../../shaders/postprocessing/bright.fragment.glsl?raw';
 import blurFragmentShader from '../../shaders/postprocessing/blur.fragment.glsl?raw';
 import finalFragmentShader from '../../shaders/postprocessing/final.fragment.glsl?raw';
+import fxaaFragmentShader from '../../shaders/postprocessing/fxaa.fragment.glsl?raw';
 
 const BLOOM_SCALE = 0.5;
-const BLOOM_THRESHOLD = 1.8;
+// Tighter threshold: only the brightest cores (ring, Doppler spot) bloom, so the
+// glow stays crisp instead of veiling fine disk structure.
+const BLOOM_THRESHOLD = 2.0;
+// Unsharp-mask strength applied in the final pass (fine disk/ring detail).
+const SHARPEN_AMOUNT = 0.35;
 
 const VOID_COLOR = new THREE.Color(0x04060c);
 const BLACK = new THREE.Color(0x000000);
@@ -64,6 +69,8 @@ export function SceneCompositor() {
         type: THREE.HalfFloatType,
         depthBuffer: false,
     });
+    // Tone-mapped LDR image that FXAA reads before writing to the screen.
+    const ldrTarget = useFBO(bufferWidth, bufferHeight, { depthBuffer: false });
 
     const { backgroundScene, diskScene: fieldScene } = useCompositorScenes();
 
@@ -85,6 +92,7 @@ export function SceneCompositor() {
         bright: THREE.ShaderMaterial;
         blur: THREE.ShaderMaterial;
         final: THREE.ShaderMaterial;
+        fxaa: THREE.ShaderMaterial;
     } | null>(null);
 
     useEffect(() => {
@@ -125,18 +133,31 @@ export function SceneCompositor() {
                 uStreak: { value: 0.5 },
                 uChromatic: { value: 0 },
                 uVignette: { value: 0.35 },
-                uGrain: { value: 0.035 },
+                uGrain: { value: 0.022 },
+                uSharpen: { value: SHARPEN_AMOUNT },
+                uTexel: { value: new THREE.Vector2() },
                 uTime: { value: 0 },
             },
             depthTest: false,
             depthWrite: false,
         });
+        const fxaa = new THREE.ShaderMaterial({
+            vertexShader: fullscreenVertexShader,
+            fragmentShader: fxaaFragmentShader,
+            uniforms: {
+                uTexture: { value: null },
+                uTexel: { value: new THREE.Vector2() },
+            },
+            depthTest: false,
+            depthWrite: false,
+        });
 
-        postRef.current = { scene, quad, bright, blur, final };
+        postRef.current = { scene, quad, bright, blur, final, fxaa };
         return () => {
             bright.dispose();
             blur.dispose();
             final.dispose();
+            fxaa.dispose();
             quad.geometry.dispose();
             postRef.current = null;
         };
@@ -193,7 +214,7 @@ export function SceneCompositor() {
         gl.setRenderTarget(bloomTargetA);
         gl.render(post.scene, camera);
 
-        // Pass 6: final tone-mapped composite to screen.
+        // Pass 6: final tone-mapped composite into the LDR target.
         const finalUniforms = post.final.uniforms;
         finalUniforms.uScene.value = sceneTarget.texture;
         finalUniforms.uBloom.value = bloomTargetA.texture;
@@ -202,9 +223,17 @@ export function SceneCompositor() {
         finalUniforms.uChromatic.value = reducedMotion
             ? 0
             : Math.min(1, accretionRuntime.reaction * 1.3);
-        finalUniforms.uGrain.value = reducedMotion ? 0 : 0.035;
+        finalUniforms.uGrain.value = reducedMotion ? 0 : 0.022;
+        finalUniforms.uTexel.value.set(1 / bufferWidth, 1 / bufferHeight);
         finalUniforms.uTime.value = state.clock.elapsedTime;
         post.quad.material = post.final;
+        gl.setRenderTarget(ldrTarget);
+        gl.render(post.scene, camera);
+
+        // Pass 7: FXAA anti-aliasing of the LDR image to the screen.
+        post.fxaa.uniforms.uTexture.value = ldrTarget.texture;
+        post.fxaa.uniforms.uTexel.value.set(1 / bufferWidth, 1 / bufferHeight);
+        post.quad.material = post.fxaa;
         gl.setRenderTarget(null);
         gl.render(post.scene, camera);
     }, 1);

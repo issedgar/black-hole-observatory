@@ -13,6 +13,8 @@ uniform float uStreak; // subtle anamorphic horizontal flare
 uniform float uChromatic; // 0 normally; > 0 only during extreme events
 uniform float uVignette;
 uniform float uGrain;
+uniform float uSharpen; // unsharp-mask amount for fine disk/ring detail
+uniform vec2 uTexel;    // 1 / framebuffer resolution
 uniform float uTime;
 
 varying vec2 vUv;
@@ -43,6 +45,24 @@ void main() {
         scene.b = texture2D(uScene, vUv - fromCenter * amount).b;
     } else {
         scene = texture2D(uScene, vUv).rgb;
+    }
+
+    // Unsharp mask: lift the fine filamentary disk structure and the photon-ring
+    // edge that the reduced-resolution field pass softens. A 4-tap cross blur is
+    // the low-pass; the high-pass is taken on LUMINANCE and added back to all
+    // channels equally, so bright edges gain micro-contrast without the coloured
+    // ringing a per-channel unsharp leaves on the disk's high-contrast inner rim.
+    // Applied to the HDR scene (before bloom/tone-map) so it sharpens structure,
+    // not the bloom halo.
+    if (uSharpen > 0.001) {
+        vec3 blur = 0.25 * (
+            texture2D(uScene, vUv + vec2(uTexel.x, 0.0)).rgb +
+            texture2D(uScene, vUv - vec2(uTexel.x, 0.0)).rgb +
+            texture2D(uScene, vUv + vec2(0.0, uTexel.y)).rgb +
+            texture2D(uScene, vUv - vec2(0.0, uTexel.y)).rgb
+        );
+        float highPass = dot(scene - blur, vec3(0.299, 0.587, 0.114));
+        scene = max(scene + highPass * uSharpen, 0.0);
     }
 
     vec3 bloom = texture2D(uBloom, vUv).rgb;

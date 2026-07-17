@@ -12,6 +12,15 @@ const DEFAULT_POSITION = new THREE.Vector3(0, 4, 34);
 const MIN_DISTANCE = 11;
 const MAX_DISTANCE = 140;
 
+// Vista framing: the world-space half-width the distant view must keep inside the
+// horizontal field of view (disk outer radius ~24 r_g + margin). On narrow
+// (portrait / mobile) screens the horizontal FOV is small, so fitting this width
+// pushes the camera much farther back than on a wide desktop — which is exactly
+// what "vista" needs so the whole black hole stays visible. Capped so an extreme
+// aspect can never send the camera to a degenerate distance.
+const VISTA_FIT_HALF_WIDTH = 28;
+const VISTA_MAX_DISTANCE = 180;
+
 /**
  * Camera controller. Manual mode uses damped orbit controls (mouse + touch) with
  * a hard minimum distance so the observer can never cross the horizon. Cinematic
@@ -161,7 +170,17 @@ export function CameraRig() {
                 reducedMotion ? 72 : 78,
                 0.5 + 0.5 * Math.sin(t * 0.02 * slow + 1.0),
             );
-            const distance = breathing + accretionRuntime.reaction * 8.0;
+            // Distance needed to fit the disk horizontally at the current aspect;
+            // dominates on narrow screens, no-ops on wide ones.
+            const perspective = camera as THREE.PerspectiveCamera;
+            const aspect = state.size.width / Math.max(1, state.size.height);
+            const halfFovTan =
+                Math.tan(THREE.MathUtils.degToRad(perspective.fov) / 2) * aspect;
+            const fitDistance = VISTA_FIT_HALF_WIDTH / Math.max(halfFovTan, 0.05);
+            const distance = Math.min(
+                Math.max(breathing + accretionRuntime.reaction * 8.0, fitDistance),
+                VISTA_MAX_DISTANCE,
+            );
 
             const cosElevation = Math.cos(elevation);
             pathPosition.set(

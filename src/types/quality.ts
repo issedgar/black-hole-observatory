@@ -50,15 +50,15 @@ export const QUALITY_SETTINGS: Record<QualityProfile, QualitySettings> = {
     medium: {
         dprMax: 1.5,
         starCount: 6000,
-        diskMarchSteps: 80,
-        diskResolutionScale: 0.75,
+        diskMarchSteps: 96,
+        diskResolutionScale: 0.85,
         particleCount: 3500,
     },
     high: {
         dprMax: 2,
         starCount: 12000,
-        diskMarchSteps: 110,
-        diskResolutionScale: 0.85,
+        diskMarchSteps: 128,
+        diskResolutionScale: 1.0,
         particleCount: 6500,
     },
     ultra: {
