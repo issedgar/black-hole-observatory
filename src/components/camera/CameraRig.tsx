@@ -24,6 +24,8 @@ export function CameraRig() {
     const resetNonce = useCameraStore((state) => state.resetNonce);
     const setMode = useCameraStore((state) => state.setMode);
     const toggleCinematic = useCameraStore((state) => state.toggleCinematic);
+    const toggleVista = useCameraStore((state) => state.toggleVista);
+    const exitVista = useCameraStore((state) => state.exitVista);
     const requestReset = useCameraStore((state) => state.requestReset);
     const reducedMotion = usePrefsStore((state) => state.reducedMotion);
 
@@ -53,13 +55,18 @@ export function CameraRig() {
             }
             if (event.key === 'c' || event.key === 'C') {
                 toggleCinematic();
+            } else if (event.key === 'v' || event.key === 'V') {
+                toggleVista();
             } else if (event.key === 'r' || event.key === 'R') {
                 requestReset();
+            } else if (event.key === 'Escape') {
+                // Esc leaves the immersive vista (deliberate exit only).
+                exitVista();
             }
         };
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [toggleCinematic, requestReset]);
+    }, [toggleCinematic, toggleVista, exitVista, requestReset]);
 
     // Any direct interaction interrupts the cinematic camera.
     useEffect(() => {
@@ -130,6 +137,40 @@ export function CameraRig() {
             // Damped follow of the moving path: eases in smoothly from wherever
             // manual control left the camera, with no abrupt cut.
             camera.position.lerp(pathPosition, 1 - Math.exp(-dt * 1.6));
+            camera.lookAt(0, 0, 0);
+            return;
+        }
+
+        if (mode === 'vista') {
+            cineTime.current += dt;
+            const t = cineTime.current;
+            const slow = reducedMotion ? 0.4 : 1.0;
+
+            // Distant, near-edge-on contemplation: the hole sits small and
+            // centred against the star field, disc seen almost on-edge. Very slow
+            // azimuth drift and a gentle elevation/distance sway read as "watching
+            // from afar" without any abrupt motion.
+            const azimuth = t * 0.02 * slow;
+            const elevation = THREE.MathUtils.lerp(
+                0.12,
+                reducedMotion ? 0.17 : 0.22,
+                0.5 + 0.5 * Math.sin(t * 0.025 * slow),
+            );
+            const breathing = THREE.MathUtils.lerp(
+                62,
+                reducedMotion ? 72 : 78,
+                0.5 + 0.5 * Math.sin(t * 0.02 * slow + 1.0),
+            );
+            const distance = breathing + accretionRuntime.reaction * 8.0;
+
+            const cosElevation = Math.cos(elevation);
+            pathPosition.set(
+                distance * cosElevation * Math.sin(azimuth),
+                distance * Math.sin(elevation),
+                distance * cosElevation * Math.cos(azimuth),
+            );
+            // Gentle damped dolly-out from wherever the camera was, no cut.
+            camera.position.lerp(pathPosition, 1 - Math.exp(-dt * 1.2));
             camera.lookAt(0, 0, 0);
             return;
         }
