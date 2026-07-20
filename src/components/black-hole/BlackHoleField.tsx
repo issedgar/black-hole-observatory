@@ -2,6 +2,7 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useVisualStore } from '../../stores/visualStore';
+import { useCameraStore } from '../../stores/cameraStore';
 import { QUALITY_SETTINGS } from '../../types/quality';
 import { resolveIncludes } from '../../utils/shader';
 import { simClock } from '../../simulation/runtime/simClock';
@@ -87,16 +88,18 @@ export function BlackHoleField({ backgroundTexture }: BlackHoleFieldProps) {
             uPhotonIntensity: { value: 4.2 },
             uPhotonWidth: { value: 0.08 },
             uApproachDir: { value: new THREE.Vector2(1, 0) },
+            uDiskDetail: { value: 0 },
         }),
         // eslint-disable-next-line react-hooks/exhaustive-deps
         [],
     );
 
-    useFrame((state) => {
+    useFrame((state, delta) => {
         const material = materialRef.current;
         if (!material) {
             return;
         }
+        const dt = Math.min(delta, 0.05);
         const camera = state.camera as THREE.PerspectiveCamera;
         camera.matrixWorld.extractBasis(camRight, camUp, camForward);
         camForward.negate();
@@ -114,9 +117,17 @@ export function BlackHoleField({ backgroundTexture }: BlackHoleFieldProps) {
         ndc.copy(ORIGIN).project(camera);
         u.uCenter.value.set(ndc.x * 0.5 + 0.5, ndc.y * 0.5 + 0.5);
 
+        // Vista mode reveals the defined spiral "lanes" and faster flow, eased in
+        // and out so entering/leaving morphs smoothly. A few extra march steps
+        // help resolve the finer bands at the distant vista framing (under the
+        // adaptive-quality safety net).
+        const detailTarget = useCameraStore.getState().mode === 'vista' ? 1 : 0;
+        const detail = u.uDiskDetail.value as number;
+        u.uDiskDetail.value = detail + (detailTarget - detail) * (1 - Math.exp(-dt * 2.0));
+
         u.uBackground.value = backgroundTexture;
         u.uTime.value = simClock.time;
-        u.uSteps.value = marchSteps;
+        u.uSteps.value = marchSteps + Math.round((u.uDiskDetail.value as number) * 56);
         u.uDensity.value = DISK_DENSITY * diskDensity;
         u.uBend.value = FIELD_BEND * bend;
         u.uReaction.value = accretionRuntime.reaction;

@@ -43,6 +43,7 @@ uniform vec3 uPhotonColor;
 uniform float uPhotonIntensity;
 uniform float uPhotonWidth;  // ring half-width in impact-parameter units
 uniform vec2 uApproachDir;
+uniform float uDiskDetail;   // 0 normally; ->1 in vista mode (defined lanes + flow)
 
 varying vec2 vUv;
 
@@ -159,7 +160,8 @@ void main() {
                     uRotSpeed,
                     uThickness,
                     uDensity,
-                    uReaction
+                    uReaction,
+                    uDiskDetail
                 );
                 float aStep = clamp(diskSample.a * subStepSize, 0.0, 1.0);
                 accum += (1.0 - alpha) * diskSample.rgb * aStep;
@@ -219,13 +221,44 @@ void main() {
     float ringArg = (impact - uBCrit) / uPhotonWidth;
     float ringBand = exp(-(ringArg * ringArg));
     vec2 screenDir = normalize((vUv - uCenter) * vec2(uAspect, 1.0) + 1e-5);
+    float ringAngle = atan(screenDir.y, screenDir.x);
     float align = dot(screenDir, normalize(uApproachDir));
     // clamp the base to [0,1] before pow: `align` is a dot product of unit vectors
     // that precision can nudge just past ±1, and pow() of the resulting negative
     // base is undefined (NaN on strict GPUs).
     float asymmetry = mix(0.3, 1.0, pow(clamp(align * 0.5 + 0.5, 0.0, 1.0), 1.4));
-    float flicker = 0.92 + 0.08 * sin(uTime * 3.0 + atan(screenDir.y, screenDir.x) * 7.0);
-    color += uPhotonColor * ringBand * uPhotonIntensity * asymmetry * flicker;
+    float flicker = 0.92 + 0.08 * sin(uTime * 3.0 + ringAngle * 7.0);
+
+    // Vista core: break the clean photon ring into an uneven, asymmetric boundary
+    // — angular turbulence + slow drift give local brightening and partially
+    // occluded arcs instead of a smooth UI-like stroke. Off (=1) outside vista.
+    float coreD = uDiskDetail;
+    float ringTurb = fbm3(
+        vec3(cos(ringAngle) * 2.5, sin(ringAngle) * 2.5, uTime * 0.06),
+        3
+    );
+    float ringMod = mix(1.0, 0.45 + 1.25 * ringTurb, coreD);
+    color += uPhotonColor * ringBand * uPhotonIntensity * asymmetry * flicker * ringMod;
+
+    // Vista core: abstract cosmic iris — a couple of faint concentric arcs of
+    // compressed light just outside the shadow, with angular density variation and
+    // slow rotation, plus a soft dark "well" gradient into the shadow edge so the
+    // centre reads as deep space folding inward rather than a flat black disc. The
+    // shadow interior itself stays black (nothing added when inShadow).
+    if (coreD > 0.001 && !inShadow) {
+        float irisRot = uTime * 0.04;
+        for (int a = 0; a < 2; a++) {
+            float rArc = uBCrit * (1.16 + 0.22 * float(a));
+            float w = uPhotonWidth * (3.5 + 2.0 * float(a));
+            float t = (impact - rArc) / w;
+            float band = exp(-(t * t));
+            float angDensity = 0.55 + 0.45 * sin(ringAngle * (3.0 + float(a) * 2.0) + irisRot + rArc);
+            color += uPhotonColor * band * angDensity * 0.22 * coreD;
+        }
+        // Compressed-light darkening just outside the shadow -> optical depth.
+        float wellEdge = smoothstep(uBCrit * 1.5, uBCrit, impact); // 1 near edge
+        color *= mix(1.0, mix(1.0, 0.82, wellEdge), coreD);
+    }
 
     // Coverage is driven by real field content — the shadow, the disk's
     // opacity, the photon ring, and whether lensing actually displaced this
